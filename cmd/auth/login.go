@@ -230,10 +230,12 @@ func authLoginRun(opts *LoginOptions) error {
 			fmt.Fprintf(f.IOStreams.ErrOut, "[lark-cli] [WARN] auth login: failed to cache requested scopes: %v\n", err)
 		}
 		data := map[string]interface{}{
-			"verification_url": authResp.VerificationUriComplete,
-			"device_code":      authResp.DeviceCode,
-			"expires_in":       authResp.ExpiresIn,
-			"hint":             fmt.Sprintf("Show verification_url to user, then immediately execute: lark-cli auth login --device-code %s (blocks until authorized or timeout). Do not instruct the user to run this command themselves.", authResp.DeviceCode),
+			"verification_url":  authResp.VerificationUriComplete,
+			"user_code":         authResp.UserCode,
+			"device_code":       authResp.DeviceCode,
+			"expires_in":        authResp.ExpiresIn,
+			"hint":              fmt.Sprintf("Show verification_url to user, then immediately execute: lark-cli auth login --device-code %s (blocks until authorized or timeout). Do not instruct the user to run this command themselves.", authResp.DeviceCode),
+			"display_markdown":  fmt.Sprintf("请打开以下链接完成授权：\n\n[点击打开](%s)\n\n验证码：`%s`\n\n完成后本命令将自动继续。", authResp.VerificationUriComplete, authResp.UserCode),
 		}
 		encoder := json.NewEncoder(f.IOStreams.Out)
 		encoder.SetEscapeHTML(false)
@@ -251,6 +253,7 @@ func authLoginRun(opts *LoginOptions) error {
 			"verification_uri_complete": authResp.VerificationUriComplete,
 			"user_code":                 authResp.UserCode,
 			"expires_in":                authResp.ExpiresIn,
+			"display_markdown":          fmt.Sprintf("请打开以下链接完成授权：\n\n[点击打开](%s)\n\n验证码：`%s`\n\n完成后本命令将自动继续。", authResp.VerificationUriComplete, authResp.UserCode),
 		}
 		encoder := json.NewEncoder(f.IOStreams.Out)
 		encoder.SetEscapeHTML(false)

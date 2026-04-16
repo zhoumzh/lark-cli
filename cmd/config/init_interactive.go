@@ -5,6 +5,7 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -196,6 +197,14 @@ func runCreateAppFlow(ctx context.Context, f *cmdutil.Factory, brandOverride cor
 		fmt.Fprintf(f.IOStreams.ErrOut, "%s", msg.OpenLinkNonTTY)
 		fmt.Fprintf(f.IOStreams.ErrOut, "  %s\n\n", verificationURL)
 		fmt.Fprintf(f.IOStreams.ErrOut, "%s\n", msg.WaitingForScanNonTTY)
+		data := map[string]interface{}{
+			"verification_url": verificationURL,
+			"user_code":        authResp.UserCode,
+			"display_markdown": fmt.Sprintf("请打开以下链接完成应用配置：\n\n[点击打开](%s)\n\n验证码：`%s`\n\n完成后本命令将自动继续。", verificationURL, authResp.UserCode),
+		}
+		encoder := json.NewEncoder(f.IOStreams.Out)
+		encoder.SetEscapeHTML(false)
+		_ = encoder.Encode(data)
 	}
 	result, err := larkauth.PollAppRegistration(ctx, httpClient, core.BrandFeishu, authResp.DeviceCode, authResp.Interval, authResp.ExpiresIn, f.IOStreams.ErrOut)
 	if err != nil {

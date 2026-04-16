@@ -23,12 +23,13 @@ type ErrorEnvelope struct {
 
 // ErrDetail describes a structured error.
 type ErrDetail struct {
-	Type       string      `json:"type"`
-	Code       int         `json:"code,omitempty"`
-	Message    string      `json:"message"`
-	Hint       string      `json:"hint,omitempty"`
-	ConsoleURL string      `json:"console_url,omitempty"`
-	Detail     interface{} `json:"detail,omitempty"`
+	Type            string      `json:"type"`
+	Code            int         `json:"code,omitempty"`
+	Message         string      `json:"message"`
+	Hint            string      `json:"hint,omitempty"`
+	ConsoleURL      string      `json:"console_url,omitempty"`
+	DisplayMarkdown string      `json:"display_markdown,omitempty"`
+	Detail          interface{} `json:"detail,omitempty"`
 }
 
 // Meta carries optional metadata in envelope responses.

@@ -19,6 +19,8 @@ description: "飞书/Lark CLI 共享基础：应用配置初始化、认证登�
 lark-cli config init --new
 ```
 
+> **display_markdown 规则**：如果输出包含 `display_markdown` 字段，**优先直接将该字段内容发送给用户**，不要自行拼接消息文本。
+
 ## 认证
 
 ### 身份类型
@@ -71,6 +73,8 @@ lark-cli auth login --scope "<missing_scope>"   # 按具体 scope 授权（推�
 lark-cli auth login --scope "calendar:calendar:readonly"
 
 ```
+
+> **display_markdown 规则**：如果输出包含 `display_markdown` 字段，**优先直接将该字段内容发送给用户**，不要自行拼接消息文本。同样适用于权限不足错误中的 `console_url` 场景——优先使用 `error.display_markdown` 引导用户前往开发者后台。
 
 
 ## 更新检查
