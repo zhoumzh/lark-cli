@@ -7,7 +7,7 @@ const { execFileSync } = require("child_process");
 const os = require("os");
 
 const VERSION = require("../package.json").version.replace(/-.*$/, "");
-const REPO = "larksuite/cli";
+const REPO = "zhoumzh/lark-cli";
 const NAME = "lark-cli";
 
 const PLATFORM_MAP = {
