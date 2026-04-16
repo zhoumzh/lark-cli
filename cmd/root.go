@@ -337,6 +337,7 @@ func enrichPermissionError(f *cmdutil.Factory, exitErr *output.ExitError) {
 	isBot := f.ResolvedIdentity.IsBot()
 
 	larkCode := exitErr.Detail.Code
+	displayMarkdown := fmt.Sprintf("权限不足，请前往开发者后台开通：\n\n[点击打开权限配置](%s)\n\n需要开通的 scope：`%s`", consoleURL, recommended)
 	switch larkCode {
 	case output.LarkErrUserScopeInsufficient, output.LarkErrUserNotAuthorized:
 		// User has not authorized the scope → re-authorize
@@ -347,12 +348,14 @@ func enrichPermissionError(f *cmdutil.Factory, exitErr *output.ExitError) {
 			exitErr.Detail.Hint = fmt.Sprintf("run `lark-cli auth login --scope \"%s\"` in the background. It blocks and outputs a verification URL — retrieve the URL and open it in a browser to complete login.", recommended)
 		}
 		exitErr.Detail.ConsoleURL = consoleURL
+		exitErr.Detail.DisplayMarkdown = displayMarkdown
 
 	case output.LarkErrAppScopeNotEnabled:
 		// App has not enabled the API scope → admin console
 		exitErr.Detail.Message = fmt.Sprintf("App scope not enabled: required scope %s [%d]", recommended, larkCode)
 		exitErr.Detail.Hint = "enable the scope in developer console (see console_url)"
 		exitErr.Detail.ConsoleURL = consoleURL
+		exitErr.Detail.DisplayMarkdown = displayMarkdown
 
 	default:
 		// Other permission errors (matched by keyword)
@@ -364,6 +367,7 @@ func enrichPermissionError(f *cmdutil.Factory, exitErr *output.ExitError) {
 				"enable scope in console (see console_url), or run `lark-cli auth login --scope \"%s\"` in the background. It blocks and outputs a verification URL — retrieve the URL and open it in a browser to complete login.", recommended)
 		}
 		exitErr.Detail.ConsoleURL = consoleURL
+		exitErr.Detail.DisplayMarkdown = displayMarkdown
 	}
 }
 
