@@ -47,6 +47,7 @@ var MailDraftCreate = common.Shortcut{
 		{Name: "attach", Desc: "Optional. Regular attachment file paths (relative path only). Separate multiple paths with commas. Each path must point to a readable local file."},
 		{Name: "inline", Desc: "Optional. Inline images as a JSON array. Each entry: {\"cid\":\"<unique-id>\",\"file_path\":\"<relative-path>\"}. All file_path values must be relative paths. Cannot be used with --plain-text. CID images are embedded via <img src=\"cid:...\"> in the HTML body. CID is a unique identifier, e.g. a random hex string like \"a1b2c3d4e5f6a7b8c9d0\"."},
 		signatureFlag,
+		priorityFlag,
 	},
 	DryRun: func(ctx context.Context, runtime *common.RuntimeContext) *common.DryRunAPI {
 		input, err := parseDraftCreateInput(runtime)
@@ -79,10 +80,14 @@ var MailDraftCreate = common.Shortcut{
 		if err := validateComposeInlineAndAttachments(runtime.FileIO(), runtime.Str("attach"), runtime.Str("inline"), runtime.Bool("plain-text"), runtime.Str("body")); err != nil {
 			return err
 		}
-		return nil
+		return validatePriorityFlag(runtime)
 	},
 	Execute: func(ctx context.Context, runtime *common.RuntimeContext) error {
 		input, err := parseDraftCreateInput(runtime)
+		if err != nil {
+			return err
+		}
+		priority, err := parsePriority(runtime.Str("priority"))
 		if err != nil {
 			return err
 		}
@@ -91,18 +96,26 @@ var MailDraftCreate = common.Shortcut{
 		if err != nil {
 			return err
 		}
-		rawEML, err := buildRawEMLForDraftCreate(runtime, input, sigResult)
+		rawEML, err := buildRawEMLForDraftCreate(ctx, runtime, input, sigResult, priority)
 		if err != nil {
 			return err
 		}
-		draftID, err := draftpkg.CreateWithRaw(runtime, mailboxID, rawEML)
+		draftResult, err := draftpkg.CreateWithRaw(runtime, mailboxID, rawEML)
 		if err != nil {
 			return fmt.Errorf("create draft failed: %w", err)
 		}
-		out := map[string]interface{}{"draft_id": draftID}
+		out := map[string]interface{}{"draft_id": draftResult.DraftID}
+		if draftResult.Reference != "" {
+			out["reference"] = draftResult.Reference
+		}
 		runtime.OutFormat(out, nil, func(w io.Writer) {
 			fmt.Fprintln(w, "Draft created.")
-			fmt.Fprintf(w, "draft_id: %s\n", draftID)
+			// Intentionally keep +draft-create output minimal: unlike reply/forward/send
+			// draft-save flows, it does not add a follow-up send tip.
+			fmt.Fprintf(w, "draft_id: %s\n", draftResult.DraftID)
+			if reference, _ := out["reference"].(string); reference != "" {
+				fmt.Fprintf(w, "reference: %s\n", reference)
+			}
 		})
 		return nil
 	},
@@ -129,7 +142,7 @@ func parseDraftCreateInput(runtime *common.RuntimeContext) (draftCreateInput, er
 	return input, nil
 }
 
-func buildRawEMLForDraftCreate(runtime *common.RuntimeContext, input draftCreateInput, sigResult *signatureResult) (string, error) {
+func buildRawEMLForDraftCreate(ctx context.Context, runtime *common.RuntimeContext, input draftCreateInput, sigResult *signatureResult, priority string) (string, error) {
 	senderEmail := resolveComposeSenderEmail(runtime)
 	if senderEmail == "" {
 		return "", fmt.Errorf("unable to determine sender email; please specify --from explicitly")
@@ -159,8 +172,11 @@ func buildRawEMLForDraftCreate(runtime *common.RuntimeContext, input draftCreate
 		return "", output.ErrValidation("%v", err)
 	}
 	var autoResolvedPaths []string
+	var composedHTMLBody string
+	var composedTextBody string
 	if input.PlainText {
-		bld = bld.TextBody([]byte(input.Body))
+		composedTextBody = input.Body
+		bld = bld.TextBody([]byte(composedTextBody))
 	} else if bodyIsHTML(input.Body) || sigResult != nil {
 		htmlBody := input.Body
 		if !bodyIsHTML(input.Body) {
@@ -171,7 +187,8 @@ func buildRawEMLForDraftCreate(runtime *common.RuntimeContext, input draftCreate
 			return "", resolveErr
 		}
 		resolved = injectSignatureIntoBody(resolved, sigResult)
-		bld = bld.HTMLBody([]byte(resolved))
+		composedHTMLBody = resolved
+		bld = bld.HTMLBody([]byte(composedHTMLBody))
 		bld = addSignatureImagesToBuilder(bld, sigResult)
 		var allCIDs []string
 		for _, ref := range refs {
@@ -188,14 +205,16 @@ func buildRawEMLForDraftCreate(runtime *common.RuntimeContext, input draftCreate
 			return "", err
 		}
 	} else {
-		bld = bld.TextBody([]byte(input.Body))
+		composedTextBody = input.Body
+		bld = bld.TextBody([]byte(composedTextBody))
 	}
-	allFilePaths := append(append(splitByComma(input.Attach), inlineSpecFilePaths(inlineSpecs)...), autoResolvedPaths...)
-	if err := checkAttachmentSizeLimit(runtime.FileIO(), allFilePaths, 0); err != nil {
+	bld = applyPriority(bld, priority)
+	allInlinePaths := append(inlineSpecFilePaths(inlineSpecs), autoResolvedPaths...)
+	composedBodySize := int64(len(composedHTMLBody) + len(composedTextBody))
+	emlBase := estimateEMLBaseSize(runtime.FileIO(), composedBodySize, allInlinePaths, 0)
+	bld, err = processLargeAttachments(ctx, runtime, bld, composedHTMLBody, composedTextBody, splitByComma(input.Attach), emlBase, 0)
+	if err != nil {
 		return "", err
-	}
-	for _, path := range splitByComma(input.Attach) {
-		bld = bld.AddFileAttachment(path)
 	}
 	rawEML, err := bld.BuildBase64URL()
 	if err != nil {
